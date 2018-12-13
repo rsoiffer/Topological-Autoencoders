@@ -7,40 +7,6 @@ from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
 
 
-def autoencoder(input_points, m, batch_size=128):
-    N = input_points.shape[0]
-    M = input_points.shape[1]
-    input_points = input_points.astype(np.float32)
-    batch_size = min(N, batch_size)
-
-    batch = tf.placeholder(tf.int32, [None])
-
-    D = tf.gather(input_points, batch)
-    x = tf.layers.dense(D, 50, tf.nn.leaky_relu)
-    x = tf.layers.dense(x, 50, tf.nn.leaky_relu)
-    Y = tf.layers.dense(x, m)
-    x = tf.layers.dense(Y, 50, tf.nn.leaky_relu)
-    x = tf.layers.dense(x, 50, tf.nn.leaky_relu)
-    D2 = tf.layers.dense(x, M)
-
-    loss = tf.reduce_mean(tf.square(D - D2))
-    train_op = tf.train.AdamOptimizer(1e-4).minimize(loss)
-
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
-        graphs = []
-        for i in range(20001):
-            random_batch = np.random.choice(N, size=[batch_size], replace=False)
-            loss_out, _ = sess.run([loss, train_op], feed_dict={batch: random_batch})
-            graphs.append(loss_out)
-
-            if i % 100 == 0:
-                print('Step', i)
-                print(loss_out)
-
-        return sess.run(Y, feed_dict={batch: np.arange(N)}), graphs
-
-
 def estimate_t(input_points, perplexity):
     n = input_points.shape[0]
     psd = np.square(squareform(pdist(input_points)))
@@ -53,39 +19,6 @@ def estimate_t(input_points, perplexity):
     return find_zero_parallel(
         lambda y: entropy(y) - np.log(perplexity),
         lambda y: 10 * np.exp(3 * y), n)
-
-    # return find_zero_parallel(
-    #     lambda y: np.sum(np.exp(-psd / y), 0) - perplexity,
-    #     lambda y: 10 * np.exp(3 * y), n)
-
-
-def find_subspace(input_points, x, m, t):
-    N = input_points.shape[0]
-    M = input_points.shape[1]
-
-    a_matrix = np.zeros([M, M])
-    for i in range(N):
-        z = input_points[i] - x
-        scaled_dist = np.linalg.norm(z) * t
-        if scaled_dist < 5:
-            weight = np.exp(-np.square(scaled_dist))
-            a_matrix += weight * np.outer(z, z)
-
-    eigenvalues, eigenvectors = np.linalg.eigh(a_matrix)
-    return np.transpose(eigenvectors[:, -m:])
-
-
-def find_zero(f, g, iters=10):
-    x = 0
-    s = np.sign(f(g(x)))
-    x -= s
-    while s == np.sign(f(g(x))):
-        x -= s
-    x += s / 2
-    for i in range(2, iters):
-        step = 2 ** -i
-        x -= step * np.sign(f(g(x)))
-    return g(x)
 
 
 def find_zero_parallel(f, g, n, iters=20):
